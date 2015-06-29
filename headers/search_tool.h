@@ -654,10 +654,10 @@ struct optimization_controller{
 				case '8':					
 					cin>>iteration_num;
 					break;
-				case '9':
+				case 'd':
 					cin>>show_mod;
 					break;
-				case 'd':
+				case '0':
 					cin>>show_freq;
 					break;
 				case 'a':

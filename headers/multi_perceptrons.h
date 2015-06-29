@@ -111,6 +111,7 @@ public:
 	bool train_mod;
 	char loss_mod;	
 	bool reguler_mod;
+	bool save_history;
 	perceptrons *nerv_bottom,*nerv_top,**nervs;
 	int data_num;
 	string path;
@@ -130,6 +131,7 @@ public:
 		path=name+"struct.stl";
 		loss_mod='2';
 		reguler_mod=0;
+		save_history=false;
 	}
 		void init_nervs(){			
 		if(nervs!=NULL){
@@ -338,7 +340,7 @@ public:
 		fin.write((char *)tmp,sizeof(float)*weight_len);
 		delete [] tmp;	
 		fin.close();	
-		if(idx>0){
+		if(idx>0&&save_history){
 			stringstream s;
 			s<<proj_path<<"struct"<<idx<<".stl";
 			file_opt.copy(path,s.str());

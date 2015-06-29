@@ -330,7 +330,7 @@ public:
 		}
 		avg_loss=0;
 		avg_step=0;
-		show_and_record();
+		//show_and_record();
 	}
 	void show_and_record(){
 		(*record_file)<<ctr.total_time<<","<<ctr.cacul_count<<","<<ctr.cacul_sample_num<<","<<(avg_loss/pre_params.show_freq)<<",";

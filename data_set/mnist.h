@@ -298,7 +298,7 @@ public:
 		float shear;
 		float affine_scale;
 		distortion_set(){
-			dev=5;
+			dev=6;
 			intensive=38;
 			move=1;
 			scale=1;
