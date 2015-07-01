@@ -24,7 +24,7 @@ void show_accurercy(string main_path,DATA_CLASS *m){
 	ipt=m->input_t[0];
 	out=new float[m->output_num*num];
 	p.run(ipt,out,m->label_t[0],num,1,-1,false,false);
-	cout<<"\n测试集 ";
+	cout<<"\t测试集 ";
 	m->accuracy(out,m->label_t[0],num);
 	delete [] out;
 }
@@ -126,6 +126,32 @@ void check_distortion(){
 	cudaFree(map);
 	delete [] c_map;
 }
+void show_bagging_result(DATA_CLASS *m,string main_path){
+	bagging p(main_path,m,false);
+	cout<<"\n各个MLP正确率:";
+	cout_show=false;
+	for(int i=0;i<p.nervs_num;i++){
+		cout<<"\n"<<p.get_idx_name(i);
+	show_accurercy(p.get_idx_name(i),m);
+	}
+	cout_show=true;
+	coutd<<"\n\nbagging结果:";
+	int num=10000;
+	float *ipt=m->input[0];
+	float *out=new float[m->output_num*num];
+	p.run(ipt,out,m->label[0],num,1,false,false);
+	cout<<"\n训练集 ";
+	m->accuracy(out,m->label[0],num);
+	delete [] out;
+	num=m->test_num;
+	ipt=m->input_t[0];
+	out=new float[m->output_num*num];
+	p.run(ipt,out,m->label_t[0],num,1,false,false);
+	cout<<"\t测试集 ";
+	m->accuracy(out,m->label_t[0],num);
+	
+
+}
 void start(){
 		
 			coutd<<"***********************************************************************";
@@ -136,8 +162,8 @@ void start(){
 			coutd;
 			coutd<<"***********************************************************************";
 			g_gpu_init();
-			main_path="";//"f:\\mnist\\";
-			data_path="data_set\\";//"f:\\mnist\\data_set\\";
+			main_path="";//"f:\\mnist\\";//[EDIT_SYMBOL]
+			data_path="data_set\\";//"f:\\mnist\\data_set\\";//[EDIT_SYMBOL]
 			string name;
 			coutd;
 		do{
@@ -169,8 +195,8 @@ void menu(){
 			coutd<<"\t2.查看 distortion 效果";			
 			coutd<<"\t3.训练";
 			coutd<<"\t4.查看训练结果";
-			//coutd<<"\t5.bagging训练";
-			//coutd<<"\t6.bagging检验";
+			coutd<<"\t5.bagging训练";
+			coutd<<"\t6.bagging检验";
 			coutd<<"选择>";
 			char sel;
 			cin>>sel;
@@ -196,44 +222,18 @@ void menu(){
 					check_result(main_path,m);
 						 }
 					break;	
-			/*	case '5':{
+				case '5':{
 					DATA_CLASS *m=new DATA_CLASS(data_path,main_path);
 					bagging tt(main_path,m,true);
 						 }
 					break;
 				case '6':{
 					DATA_CLASS *m=new DATA_CLASS(data_path,main_path,true);
-					coutd<<"输入bagging文件夹名(默认为'-'):";
-					string nm;
-					cin>>nm;
-					if(nm[0]!='-')main_path+=nm+"\\";
-					bagging p(main_path,m,false);
-					coutd<<"输入投票方式:";
-					char v;
-					cin>>v;
-					p.vote_mod=v;
-					int num=10000;
-					float *ipt=m->input[0];
-					float *out=new float[m->output_num*num];
-					cout_show=false;
-					p.run(ipt,out,m->label[0],num);
-					cout<<"\n训练集 ";
-					cout<<"正确率:"<<m->accuracy(out,m->label[0],num);
-					delete [] out;
-					num=m->test_num;
-					ipt=m->input_t[0];
-					out=new float[m->output_num*num];
-					p.run(ipt,out,m->label_t[0],num);
-					cout<<"\t测试集 ";
-					cout<<"正确率:"<<m->accuracy(out,m->label_t[0],num);
-					cout<<"\n各个bagging正确率:";
-					for(int i=0;i<p.nervs_num;i++){
-						show_accurercy(p.get_idx_name(i),m);
-					}
-					getchar();getchar();
+					show_bagging_result(m,main_path);
+					
 						 }
 					break;
-				*/
+				
 			}
 		
 }

@@ -35,8 +35,8 @@
 #include <WINSOCK2.H>
 #pragma comment(lib,"ws2_32.lib")
 using namespace std;
-//#define coutd if(cout_show)cout<<'\n'
-#define coutd cout<<"\n"
+#define coutd if(cout_show)cout<<'\n'
+//#define coutd cout<<"\n"
 #define memzero(x) memset((x),0,_msize((x)))
 #define safe_free(x) if((x)!=NULL)delete [] (x)
 #define safe_gpu_free(x)  if((x)!=NULL)cudaFree((x))

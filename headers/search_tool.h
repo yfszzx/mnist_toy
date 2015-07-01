@@ -167,8 +167,7 @@ public:
 			cg_reset_num=50;
 			L_save_num=3;
 			init_step=0.1;
-			step=init_step;
-			r_step=init_step;
+			reset_step();
 			drv_scl=0.5;
 			max_search_angle=0.05;
 			debug=false;
@@ -235,7 +234,7 @@ public:
 					break;
 				case '8':
 					cin>>init_step;
-					step=init_step;
+					reset_step();
 					break;
 				case '9':
 					cin>>mod;
@@ -256,7 +255,10 @@ public:
 			}while(sel[0]!='c');
 			setted=true;
 		}
-		
+		void reset_step(){
+			step=init_step;
+			r_step=init_step;
+		}
 	};
 	search_set set;
 private:
@@ -603,18 +605,16 @@ struct optimization_controller{
 		void show(){
 			coutd<<"\t\t<训练参数>";
 			coutd<<"\t1.初始minibatch大小:"<<init_data_num;
-			coutd<<"\t2.初始迭代次数:"<<init_iteration_num;/*[EDIT_SYMBOL]
+			coutd<<"\t2.初始迭代次数:"<<init_iteration_num;/*[EDIT_SYMBOL]*/
 			coutd<<"\t3.minibatch增涨系数:"<<data_num_increase_rate;
 			coutd<<"\t4.迭代次数减退系数:"<<iteration_num_decay_rate;
 			coutd<<"\t5.最终minibatch大小:"<<final_data_num;
 			coutd<<"\t6.最终迭代次数:"<<final_iteration_num;
 			coutd<<"\t7.当前minibatch大小:"<<data_num;	
-			coutd<<"\t8.当前迭代次数:"<<iteration_num;
-			
+			coutd<<"\t8.当前迭代次数:"<<iteration_num;			
 			coutd<<"\t0.显示间隔"<<show_freq;
 			coutd<<"\ta.确认间隔:"<<confirm_interval;
-				coutd<<"\tb.确认Z值（损失函数减少的显著程度):"<<z;
-			*/
+			coutd<<"\tb.确认Z值（损失函数减少的显著程度):"<<z;
 			coutd<<"\td.显示方式:0.不显示过程 1.显示计算过程"<<show_mod;
 		
 			
@@ -710,7 +710,7 @@ struct optimization_controller{
 					float zz=(avg-confirm_last_avg)/sqrt((dev+confirm_last_dev)/ci);
 					if(zz>-z){
 						data_num*=data_num_increase_rate;
-						//z/=sqrt(data_num_increase_rate);
+						z/=sqrt(data_num_increase_rate);
 						iteration_num*=iteration_num_decay_rate;
 						if(data_num>final_data_num)data_num=final_data_num;
 						if(iteration_num<final_iteration_num)iteration_num=final_iteration_num;											
@@ -739,7 +739,7 @@ struct optimization_controller{
 					<<setprecision(3)<<(t/n)<<"秒),"<<setprecision(6)
 					<<"共计"<<(int)total_time/60<<"分 ";
 				
-			//	coutd<<"次数"<<iteration_num<<" minibatch"<<data_num;
+				coutd<<"次数"<<iteration_num<<" minibatch"<<data_num;
 				if(avg_step>0)cout<<" 步长 "<<setprecision(4)<<avg_step<<setprecision(6);//[EDIT_SYMBOL]
 				round_start=clock();
 			}		

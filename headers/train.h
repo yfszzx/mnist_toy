@@ -192,9 +192,7 @@ public:
 		ctr.init();	
 		search_tool::set_init();
 		if(mod=='d')return;//dropout;
-		if(mod=='b'){//bagging;
-			train_reset();
-		}
+		if(mod=='b')return;//bagging
 		if(mod=='t')if(!operate())return;//train;
 		train();
 	
@@ -293,6 +291,7 @@ public:
 	void train_reset(){
 		reset();
 		ctr.reset();
+		search_tool::set.reset_step();
 		train_bigenning();
 	}
 	void train_bigenning(){
@@ -301,7 +300,6 @@ public:
 		set_data_num(ctr.data_num);
 		pre_load(ctr.data_num);		
 		load_data();
-		bl_exit=false;
 		
 		
 	//	average_mlp.init(weight_len,100,weight);
@@ -394,13 +392,15 @@ public:
 	}
 
 
-	void train(){
+	void train(int end_num=0){
 		train_bigenning();
 		while(1){	
 			//search_tool::search(ctr.iteration_num);
+			bl_operate=false;
 			cacul_parallel_load();
 			train_controll();
-			if(bl_exit)return;
+			if(bl_operate&&!operate())return;
+			if(end_num>0&&ctr.total_rounds>end_num)break;
 		}
 		struct_save(ctr.cacul_count);
 		save_params();
@@ -412,8 +412,8 @@ public:
 		return true;
 	}
 	virtual bool pause_action(){
-		bl_exit=!operate();
-		return bl_exit;
+		bl_operate=true;		
+		return bl_operate;
 	}
 	virtual void cacul(){
 		cacul_nerv(load_train_data_class::input,load_train_data_class::target);	
@@ -451,7 +451,7 @@ public:
 		ofstream *record_file;
 		float avg_loss;
 		float avg_step;
-		bool bl_exit;
+		bool bl_operate;
 		
 };
 

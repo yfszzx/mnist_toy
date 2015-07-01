@@ -286,7 +286,8 @@ public:
 		
 	}
 	void struct_show(){
-		if(layers_num==0)coutd<<"还未初始化网络结构\n";
+
+		if(layers_num==0)cout<<"还未初始化网络结构\n";
 		else {
 			coutd<<"\t\t\t<    MLP结构    >\n";
 			coutd<<"输入:"<<input_dimen<<"维  输出:"<<output_dimen<<"维 隐层数:"<<layers_num-1<<" 层"<<" 参数数量:"<<weight_len<<" 样本数:"<<data_num;

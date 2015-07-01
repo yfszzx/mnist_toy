@@ -61,12 +61,16 @@ public:
 			coutd<<"************************";
 			coutd<<"正在训练第"<<(nervs_num+1)<<"个bagging";
 			string path=get_idx_name();
-			if(!file_opt.check_folder(path)){file_opt.create_folder(path);return;}
+			if(!file_opt.check_folder(path))file_opt.create_folder(path);//return;
 			if(!file_opt.copy(root_path+"params.stl",path+"params.stl"))return;
-			if(!file_opt.copy(root_path+"PCA.stl",path+"PCA.stl"))return;
+			if(!file_opt.copy(root_path+"pre_PCA.stl",path+"pre_PCA.stl"))return;
 			if(!file_opt.copy(root_path+"struct.stl",path+"struct.stl"))return;
+			if(nervs_num==0){nervs_num++;continue;}//第一个bagging直接从根目录中复制
 			dt_set->bagging_set();
 			ML_CLASS *nerv=new ML_CLASS(path,dt_set,'b');
+			int num=nerv->ctr.total_rounds;
+			nerv->train_reset();
+			nerv->train(num);
 			delete nerv;
 			nervs_num++;
 		}
@@ -87,9 +91,10 @@ public:
 		}while (_findnext(Handle, &FileInfo) == 0); 
 		_findclose(Handle);
 	}
-	float run(float *s_input,float *s_out,float *target,int num,float dropout=1.0f,bool in_cuda_pos=true,bool out_cuda_pos=true){
+	float run(float *s_input,float *s_out,float *s_target,int num,float dropout=1.0f,bool in_cuda_pos=true,bool out_cuda_pos=true){
 		float *input;
 		float *out;
+		float *target;
 		if(in_cuda_pos){
 			input=s_input;
 		}else{
@@ -100,9 +105,14 @@ public:
 		}
 		if(out_cuda_pos){
 			out=new float[output_dimen*num];
+			target=s_target;
 			
 		}else{
 			out=s_out;
+			cudaMalloc((void**)&target,sizeof(float)*output_dimen*num);
+			CUDA_CHECK;
+			cudaMemcpy(target,s_target,sizeof(float)*output_dimen*num,cudaMemcpyHostToDevice);
+			CUDA_CHECK;
 		
 		}
 		float *t_out;
@@ -123,18 +133,18 @@ public:
 			if(i>=nervs_num)break;
 			if (FileInfo.attrib &_A_SUBDIR){
 				if( (strcmp(FileInfo.name,".") != 0 ) && (strcmp(FileInfo.name,"..") != 0)){	
-			ML_CLASS nv(root_path+FileInfo.name+"\\",dt_set,'r');
-			nv.run(input,t_out,target,num,1.0f/*nv.dropout_scl*/);
-			cudaMemcpy(tt_out,t_out,sizeof(float)*output_dimen*num,cudaMemcpyDeviceToHost);		
-			for(int j=0;j<num;j++){
-				for(int k=0;k<output_dimen;k++){
-					d_out[output_dimen*j+k]+=tt_out[output_dimen*j+k];
-					sort_v[nervs_num*output_dimen*j+nervs_num*k+i]=tt_out[output_dimen*j+k];
-					v_out[output_dimen*j+k]+=(tt_out[output_dimen*j+k]>0.5)?1:0;
+				ML_CLASS nv(root_path+FileInfo.name+"\\",dt_set,'r');
+				nv.run(input,t_out,target,num,1.0f/*nv.dropout_scl*/);
+				cudaMemcpy(tt_out,t_out,sizeof(float)*output_dimen*num,cudaMemcpyDeviceToHost);		
+				for(int j=0;j<num;j++){
+					for(int k=0;k<output_dimen;k++){
+						d_out[output_dimen*j+k]+=tt_out[output_dimen*j+k];
+						sort_v[nervs_num*output_dimen*j+nervs_num*k+i]=tt_out[output_dimen*j+k];
+						v_out[output_dimen*j+k]+=(tt_out[output_dimen*j+k]>0.5)?1:0;
+					}
 				}
-			}
-			i++;
-			}
+				i++;
+				}
 			}		
 			
 		}while (_findnext(Handle, &FileInfo) == 0); 
