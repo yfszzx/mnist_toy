@@ -145,9 +145,11 @@ void show_cpu_data(float *data,int num=100,string illu=""){//调试使用
 }
 
 void show_memery_size(int m,char mod='g',string illu=""){
-	cout<<illu<<float(m)/1048576<<"M";
-	if(mod=='g')cout<<"显存";
-	if(mod=='c')cout<<"内存";
+	if(cout_show){
+		cout<<illu<<float(m)/1048576<<"M";
+		if(mod=='g')cout<<"显存";
+		if(mod=='c')cout<<"内存";
+	}
 }	
 struct{
 	bool check_folder(string p){
@@ -276,3 +278,191 @@ float	array_sum(float *arr,int dimen){//矢量各项之和
 		thrust::device_ptr<float> a ( arr );
 		return  thrust::reduce (a , a+dimen, (float) 0, thrust::plus <float>());
 }
+
+class virtual_data_set{
+public:
+	int input_dimen;
+	int output_dimen;
+	string action_illu;
+	int *bagging_idx;
+	int *compare_idx;
+	bool bag_mod;
+	int scl_from;
+	int scl_to;
+	int scl;
+	int compare_scl_from;
+	int compare_scl_to;
+	int compare_scl;
+	int sample_num;
+	struct cmp_data{
+		int num;
+		int input_num;
+		int output_num;
+		float *trans_input;
+		float *input;
+		float *target;
+		float *output;
+		float *cpu_input;
+		float *cpu_target;
+		float *cpu_output;
+		float result;
+		float init_result;
+		void memfree(){
+			if(input!=NULL){
+				cudaFree(input);
+				cudaFree(target);
+				cudaFree(output);
+				CUDA_CHECK;
+				delete [] cpu_input;
+				delete [] cpu_target;
+				delete [] cpu_output;
+				
+			}
+		};
+		void init(int n,int input_dimen,int output_dimen){
+			num=n;
+			input_num=input_dimen;
+			output_num=output_dimen;
+			memfree();
+			cudaMalloc((void**)&input,sizeof(float)*n*input_dimen);
+			CUDA_CHECK;
+			cudaMalloc((void**)&target,sizeof(float)*n*output_dimen);
+			CUDA_CHECK;
+			cudaMalloc((void**)&output,sizeof(float)*n*output_dimen);
+			CUDA_CHECK;
+			cpu_input=new float[input_dimen*num];
+			cpu_target=new float[output_dimen*num];
+			cpu_output=new float[output_dimen*num];
+			
+		}
+		void init_data(){
+			cudaMemcpy(input,cpu_input,sizeof(float)*input_num*num,cudaMemcpyHostToDevice);
+			CUDA_CHECK;		
+			cudaMemcpy(target,cpu_target,sizeof(float)*output_num*num,cudaMemcpyHostToDevice);
+			CUDA_CHECK;	
+			float avg=0;
+			for(int i=0;i<num;i++){
+				avg+=cpu_target[i];
+			}
+			avg/=num;
+			init_result=0;
+			for(int i=0;i<num;i++){
+				init_result+=(cpu_target[i]-avg)*(cpu_target[i]-avg);
+			}
+			init_result/=num;
+		}
+		void gpu2cpu(){
+			cudaMemcpy(cpu_output,output,sizeof(float)*output_num*num,cudaMemcpyDeviceToHost);
+			CUDA_CHECK;
+		}
+		string report(){
+			if(num==0)return "[]";
+			int n=num;
+			if(n>10000)n=10000;
+			gpu2cpu();	
+			string bl="",bll;
+			int idx;
+			stringstream f;
+			for(int i=0;i<n;i++){
+				f<<bl<<"[";
+				bll="";
+				for(int j=0;j<output_num;j++){
+					idx=i*output_num+j;
+					f<<bll<<"["<<cpu_target[idx]<<","<<cpu_output[idx]<<"]";
+					bll=",";
+				}
+				bl=",";
+				f<<"]";
+			}
+			return f.str();
+		}
+		cmp_data(){
+			input=NULL;
+			target=NULL;
+			output=NULL;
+			cpu_input=NULL;
+			cpu_target=NULL;
+			cpu_output=NULL;
+			num=0;
+			result=0;
+			trans_input=NULL;
+		}
+		~cmp_data(){
+			 memfree();
+			 if(trans_input!=NULL)cudaFree(trans_input);
+		}
+	};
+	virtual_data_set(){
+		bagging_idx=NULL;
+		compare_idx=NULL;
+		bag_mod=false;
+		scl_from=-1;
+		sample_num=0;
+	}
+	~virtual_data_set(){
+		if(bagging_idx!=NULL){
+			delete [] bagging_idx;
+			delete [] compare_idx;
+		}
+	}
+	cmp_data compare_data;
+	cmp_data train_cmp_data;
+	void get_compare_data(int num,char mod='c'){
+		cmp_data &s=(mod=='c')?compare_data:train_cmp_data;
+		s.init(num,input_dimen,output_dimen);
+		get_data(mod,s.cpu_input,s.cpu_target,num);	
+		s.init_data();
+		
+	}
+	void sample_scale_set(int sfm,int sto,int csfm,int scto){
+		scl_from=sfm;
+		scl_to=sto;
+		compare_scl_from=csfm;
+		compare_scl_to=scto;
+		scl=sto-sfm;
+		compare_scl=compare_scl_to-compare_scl_from;
+	}
+	void set_bagging_data_num(int num){
+		if(sample_num==num)return;
+		sample_num=num;
+		if(bagging_idx!=NULL){
+			delete [] bagging_idx;
+			delete [] compare_idx;
+		}
+		bagging_idx=new int[num];
+		compare_idx=new int [num];
+	}
+	int rand_idx(char mod='t'){
+		if(!bag_mod){
+			if(mod!='c')return Mrand%scl+scl_from;
+			else return Mrand%(compare_scl)+compare_scl_from;
+		}else{
+			if(mod!='c')return bagging_idx[Mrand%sample_num];
+			else return compare_idx[Mrand%sample_num];
+		}
+	}
+
+	void bagging_set(int num=0){
+		if(num==0)num=scl;
+		bag_mod=true;
+		set_bagging_data_num(num);
+		int *rec=new int[scl];
+		memset(rec,0,sizeof(int)*scl);
+		for(int i=0;i<num;i++){
+			bagging_idx[i]=Mrand%scl+scl_from;
+			rec[bagging_idx[i]-scl_from]=1;
+		}
+		for(int i=0;i<num;i++){
+			int idx;
+			do{
+				idx=Mrand%scl;
+			}while(rec[idx]);
+			compare_idx[i]=idx+scl_from;
+		}
+		delete [] rec;
+	}
+	virtual void gpu_distortion(float *input,int num)=0;
+	virtual void show_compare(char mod='c')=0;
+	virtual void self_action(void *mlp)=0;
+	virtual void get_data(char mod,float *input,float *target,int data_num)=0;
+};

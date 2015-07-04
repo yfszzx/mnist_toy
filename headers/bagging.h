@@ -14,8 +14,8 @@ public:
 		dt_set=data_set;
 		vote_mod='a';//a:averge m:middle v:vote
 		main_nerv=new ML_CLASS(path,dt_set,'r');		
-		input_dimen=main_nerv->input_dimen;
-		output_dimen=main_nerv->output_dimen;
+		input_dimen=main_nerv->multi_perceptrons::input_dimen;
+		output_dimen=main_nerv->multi_perceptrons::output_dimen;
 		load_nervs(trn);
 		if(trn) train();
 	}

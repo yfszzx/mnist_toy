@@ -202,9 +202,30 @@ public:
 		CUDA_CHECK;
 		return ret;	
 	}
-	float run(float *s_input,float *out,float *s_target,int num,float dropout=1.0f,int out_layer=-1,bool in_cuda_pos=true,bool out_cuda_pos=true){
+	float *layer_out(int layer,float *s_input,int num,bool in_cuda_pos=true){//中间层的输出，返回中间层输出数据的指针(device)
 		set_data_num(num);
-		if(out_layer==-1)out_layer=layers_num;
+		float *input;
+		if(in_cuda_pos){
+			input=s_input;
+		}else{
+			cudaMalloc((void**)&input,sizeof(float)*input_dimen*data_num);
+			CUDA_CHECK;
+			cudaMemcpy(input,s_input,sizeof(float)*input_dimen*data_num,cudaMemcpyHostToDevice);
+			CUDA_CHECK;
+
+		}
+		nerv_bottom->run(input);
+		for(int i=1;i<layer;i++){
+			nervs[i]->run(nervs[i-1]->output);
+		}
+		if(!in_cuda_pos){
+			cudaFree(input);
+			CUDA_CHECK;
+		}
+		return nervs[layer]->output;
+	}
+	float run(float *s_input,float *out,float *s_target,int num,float dropout=1.0f,bool in_cuda_pos=true,bool out_cuda_pos=true){
+		set_data_num(num);
 		float *input;
 		float *target;
 		if(in_cuda_pos){
@@ -225,18 +246,18 @@ public:
 			CUDA_CHECK;			
 		}
 		nerv_bottom->run(input);
-		for(int i=1;i<out_layer;i++){
+		for(int i=1;i<layers_num;i++){
 			nervs[i]->run(nervs[i-1]->output);
 		}
-		int dimen=nervs[out_layer-1]->nodes_num*num;
+		int dimen=nervs[layers_num-1]->nodes_num*num;
 		int blocks=(dimen+g_threads-1)/g_threads;
 		float *ov;
 		cudaMalloc((void**)&ov,sizeof(float)*output_dimen*num);
-		gpu_loss_value<<<blocks,g_threads>>>(nervs[out_layer-1]->output,target,ov,dimen,loss_mod,output_dimen,dropout);		
+		gpu_loss_value<<<blocks,g_threads>>>(nervs[layers_num-1]->output,target,ov,dimen,loss_mod,output_dimen,dropout);		
 		CUDA_CHECK;
 		float ret=array_sum(ov,dimen)/data_num;		
-		CUBT(cublasSscal(cublasHandle,dimen, &dropout,nervs[out_layer-1]->output, 1));	
-		cudaMemcpy(out,nervs[out_layer-1]->output,sizeof(float)*dimen,((out_cuda_pos)?cudaMemcpyDeviceToDevice:cudaMemcpyDeviceToHost));		
+		CUBT(cublasSscal(cublasHandle,dimen, &dropout,nervs[layers_num-1]->output, 1));	
+		cudaMemcpy(out,nervs[layers_num-1]->output,sizeof(float)*dimen,((out_cuda_pos)?cudaMemcpyDeviceToDevice:cudaMemcpyDeviceToHost));		
 		CUDA_CHECK;
 		cudaFree(ov);
 		if(!in_cuda_pos){
@@ -547,7 +568,7 @@ public:
 	float *input;
 	float *output;
 	multi_perceptrons *mlp;
-	multi_perceptrons_sample(string path){
+	multi_perceptrons_sample(string path):search_tool(path){
 		g_gpu_init();
 		mlp=new multi_perceptrons(path);
 		mlp->train_mod=true;
@@ -561,10 +582,8 @@ public:
 		coutd<<"输入训练数据数量:";
 		cin>>data_num;
 		mlp->set_data_num(data_num);
-		set.debug=true;		
 		search_init(mlp->weight_len,&(mlp->result),mlp->weight,mlp->deriv);
-		set.set();
-		set_init();
+		set_search();
 		srand((int)time(0));
 		cudaMalloc((void**)&input,sizeof(float)*data_num);
 		cudaMalloc((void**)&output,sizeof(float)*data_num);
@@ -587,11 +606,7 @@ public:
 		cin>>s;
 	}
 	virtual bool show_and_control(int i){
-		coutd<<i<<" "<<*result;
-		return true;
-	}
-	virtual bool pause_action(){
-		getchar();
+		coutd<<i<<" "<<mlp->result;
 		return true;
 	}
 	virtual void cacul(){

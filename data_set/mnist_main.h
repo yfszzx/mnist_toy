@@ -13,27 +13,27 @@ float max_value(float *out,int idx,int dimen){
 }
 
 void show_accurercy(string main_path,DATA_CLASS *m){
-	multi_perceptrons_train p(main_path,m,'r');				
+	main_train p(main_path,m,'r');				
 	int num=10000;
 	float *ipt=m->input[0];
 	float *out=new float[m->output_num*num];
-	p.run(ipt,out,m->label[0],num,1,-1,false,false);
+	p.run(ipt,out,m->label[0],num,1,false,false);
 	cout<<"\n训练集 ";
 	m->accuracy(out,m->label[0],num);	
 	num=m->test_num;
 	ipt=m->input_t[0];
 	out=new float[m->output_num*num];
-	p.run(ipt,out,m->label_t[0],num,1,-1,false,false);
+	p.run(ipt,out,m->label_t[0],num,1,false,false);
 	cout<<"\t测试集 ";
 	m->accuracy(out,m->label_t[0],num);
 	delete [] out;
 }
 void show_wrong_sample(string main_path,DATA_CLASS *m){
-	multi_perceptrons_train p(main_path,m,'r');				
+	main_train p(main_path,m,'r');				
 	int num=m->test_num;
 	float *ipt=m->input_t[0];
 	float *out=new float[m->output_num*num];
-	p.run(ipt,out,m->label_t[0],num,1,-1,false,false);
+	p.run(ipt,out,m->label_t[0],num,1,false,false);
 	coutd<<"测试集识别错误样本序号:";
 	coutd;
 	for(int i=0;i<num;i++){
@@ -156,7 +156,7 @@ void start(){
 		
 			coutd<<"***********************************************************************";
 			coutd;
-			coutd<<"                           MNIST TOY 1.0";
+			coutd<<"                           MNIST TOY 1.1";
 			coutd;
 			coutd<<"                         作者:大隐于市 ";
 			coutd;
@@ -212,7 +212,7 @@ void menu(){
 					break;
 				case '3':{	
 					DATA_CLASS *m=new DATA_CLASS(data_path,main_path);
-					multi_perceptrons_train s(main_path,m);
+					main_train s(main_path,m);
 					delete m;
 					break;
 					   }

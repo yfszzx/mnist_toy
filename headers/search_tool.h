@@ -47,54 +47,69 @@ class search_tool:public array_operate{
 	//调用虚函数cacal()以计算pos处的值和梯度，结果分别保留在result和deriv中
 
 public:
-	float *result;
-	float *pos;
-	float *deriv;	
-	search_tool(){
+	bool pause_flag;
+	float current_step;
+	search_tool(string path){
 		pos_init=NULL;
 		deriv_tmp=NULL;
 		direct=NULL;
 		tmp_array=NULL;
+		current_step=0;
+		pause_flag=false;
+		root=path;
 	}
 	~search_tool(){
 		 free_mem();
 	}
-	void search_init(int dmn=0,float *rlt_p=NULL,float *pos_p=NULL,float *drv_p=NULL){		
-		if(dmn==0)dmn=dimen;
-		if(rlt_p!=NULL)result=rlt_p;
-		if(pos_p!=NULL)pos=pos_p;
-		if(drv_p!=NULL)deriv=drv_p;	
+	void search_init(int dmn,float *rlt_p,float *pos_p,float *drv_p){
+		result=rlt_p;
+		pos=pos_p;
+		deriv=drv_p;
 		dimen=dmn;	
 		set.dimen=dmn;
+		if(!read_params()){
+			set_search();
+		}
+		if(set.dimen!=dmn){
+			coutd<<"【错误】载入的维度不一致,程序将推出";
+			string s;
+			cin>>s;
+			exit(0);
+		}		
 		free_mem();		
 		cudaMalloc((void**)&pos_init,sizeof(float)*dimen); 
+		cudaMemset(pos_init,0,sizeof(float)*dimen); 
 		CUDA_CHECK;
 		cudaMalloc((void**)&deriv_tmp,sizeof(float)*dimen);
+		cudaMemset(deriv_tmp,0,sizeof(float)*dimen); 
 		CUDA_CHECK;
 		cudaMalloc((void**)&direct,sizeof(float)*dimen); 
+		cudaMemset(direct,0,sizeof(float)*dimen);
 		CUDA_CHECK;
 		cudaMalloc((void**)&tmp_array,sizeof(float)*dimen); 
+		cudaMemset(tmp_array,0,sizeof(float)*dimen);
 		CUDA_CHECK;	
-	//	set_init();
+		coutd<<"dimen"<<dimen<<" "<<set.L_save_num;
+		if(set.mod=='4')Ld.malloc(dimen,set.L_save_num);
+		else Ld.free_mem();
 	}
-	bool set_init(){
-		//程序开始，或者改变训练参数之后，调用search()之前，需要执行此函数一次
-		if(!set.is_setted())return false;
-		set.step=set.init_step;
-		if(set.mod=='4'){
-			Ld.malloc(dimen,set.L_save_num);
-			set.LBGFS_reset=false;
-		}
-		return true;
-	}
+
 	void set_search(){
 		set.set();
-		set_init();
+		coutd<<"dimen"<<dimen<<" "<<set.L_save_num;
+		if(set.mod=='4')Ld.malloc(dimen,set.L_save_num);
+		else Ld.free_mem();
+		save_params();
 	}
-	virtual bool show_and_control(int)=0;
-	virtual bool pause_action()=0;
-	virtual void cacul()=0;
+	void reset_step(){
+		set.reset_step();
+		current_step=set.init_step;
+	}
+	void save_search(){
+		save_params();
+	}
 	bool search(float r){
+		pause_flag=false;
 		int rounds=r;
 		rounds+=((rand()%1000)<float(r-rounds)*1000)?1:0;	
 		switch(set.mod){
@@ -108,15 +123,34 @@ public:
 				if(!conj_grad(rounds))return false;
 				break;
 			case '4':
-				if(set.LBGFS_reset){
-					Ld.malloc(dimen,set.L_save_num);
-					set.LBGFS_reset=false;
-					set.memery();
-				}
 				if(!LBFGS(rounds))return false;
 				break;
 			}
 		return true;
+	}
+protected:
+	virtual bool show_and_control(int)=0;
+	virtual void cacul()=0;
+private:
+	float *result;
+	float *pos;
+	float *deriv;	
+	string root;
+	bool read_params(){
+		string path=root+"search_set.stl";
+		ifstream fin(path,ios::binary);
+		if(!fin)return false;
+		coutd<<"正在读取"<<path;
+		fin.read((char *)&set,sizeof(search_set));	
+		fin.close();
+		return true;
+	}
+	void save_params(){
+		string path=root+"search_set.stl";
+		coutd<<"正在保存"<<path;
+		ofstream fin(path,ios::binary);
+		fin.write((char *)&set,sizeof(search_set));
+		fin.close();
 	}
 	struct search_set{
 		float accept_scale;
@@ -132,9 +166,7 @@ public:
 		float init_step;
 		float step;
 		float r_step;
-		bool setted;
 		int dimen;
-		bool LBGFS_reset;
 		float drv_scl;
 		float max_search_angle;
 		void record(float stp){			
@@ -172,12 +204,6 @@ public:
 			max_search_angle=0.05;
 			debug=false;
 			mod='4';
-			setted=false;	
-			LBGFS_reset=false;
-		}
-		bool is_setted(){
-			if(setted==false)coutd<<"还未设置训练参数";
-			return setted;
 		}
 		void show(){
 			coutd<<"\t\t<搜索算法参数>";
@@ -195,8 +221,7 @@ public:
 			coutd<<"\ta.终止梯度比例"<<drv_scl;
 			coutd<<"\tb.搜索方向与梯度方向最大夹角cos值:"<<max_search_angle;
 			coutd<<"\td.调试模式(0:否 1：是)"<<debug;
-			coutd<<"\n\t当前步长:"<<step;
-			
+			coutd<<"\n\t当前步长:"<<step;			
 			memery();
 		}
 		void set(){
@@ -230,7 +255,6 @@ public:
 					break;
 				case '7':
 					cin>>L_save_num;
-					LBGFS_reset=true;
 					break;
 				case '8':
 					cin>>init_step;
@@ -238,8 +262,7 @@ public:
 					break;
 				case '9':
 					cin>>mod;
-					if(mod=='4')LBGFS_reset=true;
-					step=init_step;
+					reset_step();
 					break;
 				case 'a':
 					cin>>drv_scl;
@@ -253,7 +276,6 @@ public:
 				}
 		
 			}while(sel[0]!='c');
-			setted=true;
 		}
 		void reset_step(){
 			step=init_step;
@@ -261,7 +283,6 @@ public:
 		}
 	};
 	search_set set;
-private:
 	float *pos_init;
 	float *deriv_tmp;	
 	float *direct;
@@ -279,7 +300,10 @@ private:
 	bool pause(){
 		if(kbhit()){			
 			char s=getchar();
-			if(s=='p'||s=='P')return pause_action();
+			if(s=='p'||s=='P'){
+				pause_flag=true;
+				return true;
+			}
 		}
 		return false;
 	}
@@ -386,7 +410,8 @@ private:
 	}	
 	bool move(){//一维搜索，并确定是否终止
 		deriv_len=length(deriv);
-		set.record(wolfe_powell(set.step));
+		current_step=set.step;
+		set.record(wolfe_powell(set.step));		
 		if(set.r_step==0)return 0;
 		return 1;
 	}
@@ -443,23 +468,33 @@ private:
 		float **s;
 		float **y;
 		float save_num;
+		int dimen;
 		LG_STRUCT(){
 			s_data=NULL;
+			dimen=0;
+			save_num=0;
 		}
 		~LG_STRUCT(){
 			free_mem();
 		}
 		
-		void malloc(int dimen,int m){
+		void malloc(int dmn,int m){			
+			if(dmn==dimen&&m==save_num)return;		
 			free_mem();
 			save_num=m;
-			cudaMalloc((void**)&s_data,sizeof(float)*dimen*m); 
+			dimen=dmn;
+			cudaMalloc((void**)&s_data,sizeof(float)*dimen*m);
+			cudaMemset(s_data,0,sizeof(float)*dimen*m);
 			CUDA_CHECK;
 			cudaMalloc((void**)&y_data,sizeof(float)*dimen*m); 
+			cudaMemset(y_data,0,sizeof(float)*dimen*m);
 			CUDA_CHECK;
-			alf=new float[m];
+			alf=new float[m];			
 			ro=new float[m];
 			s=new float *[m];
+			memzero(alf);
+			memzero(ro);
+			memzero(s);
 			for(int i=0;i<m;i++)s[i]=s_data+dimen*i;
 			y=new float *[m];
 			for(int i=0;i<m;i++)y[i]=y_data+dimen*i;
@@ -474,6 +509,9 @@ private:
 				delete [] s;
 				delete [] y;
 			}
+			s_data=NULL;
+			dimen=0;
+			save_num=0;
 		}
 
 	};
@@ -540,212 +578,3 @@ private:
 
 };
 
-struct optimization_controller{
-		int init_iteration_num;
-		int init_data_num;
-		float data_num_increase_rate;
-		float iteration_num_decay_rate;
-		int final_data_num;
-		int final_iteration_num;
-		float data_num;
-		float iteration_num;
-		int cacul_count;
-		int cacul_count_last;
-		int total_rounds;
-		int cacul_sample_num;
-		int last_count;
-		
-		char show_mod;	
-		int save_freq;
-		clock_t start;
-		clock_t round_start;
-		float total_time;		
-		float confirm_last_avg;
-		float confirm_last_dev;
-		int confirm_round;
-		int confirm_interval;
-		float z;
-		int show_freq;
-		float *rec;
-		optimization_controller(){
-			init_iteration_num=1;
-			init_data_num=1000;
-			data_num_increase_rate=1;
-			iteration_num_decay_rate=1;
-			final_data_num=1000;
-			final_iteration_num=1;
-			data_num=init_data_num;
-			iteration_num=init_iteration_num;
-			save_freq=2000;
-			cacul_count=0;
-			round_start=0;
-			total_time=0;
-			total_rounds=0;
-			cacul_sample_num=0;
-			show_mod='0';	
-			show_freq=50;
-			confirm_interval=2000;
-			z=3;
-			last_count=0;
-			rec=NULL;
-		}
-		~optimization_controller(){
-			safe_free(rec);
-		}
-		void reset(){
-			cacul_count=0;
-			round_start=0;
-			total_time=0;
-			total_rounds=0;
-			cacul_sample_num=0;
-			iteration_num=init_iteration_num;			
-			data_num=init_data_num;
-			init();
-		}
-		void show(){
-			coutd<<"\t\t<训练参数>";
-			coutd<<"\t1.初始minibatch大小:"<<init_data_num;
-			coutd<<"\t2.初始迭代次数:"<<init_iteration_num;/*[EDIT_SYMBOL]*/
-			coutd<<"\t3.minibatch增涨系数:"<<data_num_increase_rate;
-			coutd<<"\t4.迭代次数减退系数:"<<iteration_num_decay_rate;
-			coutd<<"\t5.最终minibatch大小:"<<final_data_num;
-			coutd<<"\t6.最终迭代次数:"<<final_iteration_num;
-			coutd<<"\t7.当前minibatch大小:"<<data_num;	
-			coutd<<"\t8.当前迭代次数:"<<iteration_num;			
-			coutd<<"\t0.显示间隔"<<show_freq;
-			coutd<<"\ta.确认间隔:"<<confirm_interval;
-			coutd<<"\tb.确认Z值（损失函数减少的显著程度):"<<z;
-			coutd<<"\td.显示方式:0.不显示过程 1.显示计算过程"<<show_mod;
-		
-			
-			coutd<<"\ts.保存间隔:"<<save_freq;
-		}
-		void set(){
-			char sel;
-			show();
-			coutd<<"\tc.确定 l.查看";
-			while(1){
-				coutd<<"设置参数>";
-				cin>>sel;
-				switch(sel){
-				case '1':
-					cin>>init_data_num;
-					data_num=init_data_num;
-					break;
-				case '2':
-					cin>>init_iteration_num;
-					iteration_num=init_iteration_num;
-					break;
-				case '3':
-					cin>>data_num_increase_rate;
-					break;
-				case '4':
-					cin>>iteration_num_decay_rate;
-					break;
-				case '5':
-					cin>>final_data_num;
-					break;
-				case '6':
-					cin>>final_iteration_num;					
-					break;
-				case '7':
-					cin>>data_num;
-					break;
-				case '8':					
-					cin>>iteration_num;
-					break;
-				case 'd':
-					cin>>show_mod;
-					break;
-				case '0':
-					cin>>show_freq;
-					break;
-				case 'a':
-					cin>>confirm_interval;
-					break;
-				case 'b':
-					cin>>z;
-					break;
-				case 's':
-					cin>>save_freq;
-					break;
-				case 'l':
-					show();
-					break;
-				case 'c':
-					return;
-			};
-		}
-	}
-	
-		void init(){
-			round_start=clock();
-			start=clock();
-			cacul_count_last=cacul_count;
-			last_count=cacul_count;
-			confirm_round=0;
-			safe_free(rec);
-			rec=new float[confirm_interval];
-		}
-		void controll(float loss,float avg_step=-1){
-			//记录计算次数*样本数
-			cacul_sample_num+=(int)data_num*(cacul_count-last_count);
-			last_count=cacul_count;
-
-			//记录显著程度，并根据显著程度调整参数
-			int ci=confirm_interval;
-			rec[confirm_round%ci]=loss;				
-			if(confirm_round%ci==ci-1){
-				float avg=0;
-				for(int i=0;i<(int)ci;i++){
-					avg+=rec[i];
-				}
-				avg/=(int)ci;
-				float dev=0;
-				for(int i=0;i<(int)ci;i++){
-					dev+=(rec[i]-avg)*(rec[i]-avg);
-				}
-				dev/=(int)ci;
-				if(confirm_round>ci){//z检验
-					float zz=(avg-confirm_last_avg)/sqrt((dev+confirm_last_dev)/ci);
-					if(zz>-z){
-						data_num*=data_num_increase_rate;
-						z/=sqrt(data_num_increase_rate);
-						iteration_num*=iteration_num_decay_rate;
-						if(data_num>final_data_num)data_num=final_data_num;
-						if(iteration_num<final_iteration_num)iteration_num=final_iteration_num;											
-					}
-				//	coutd<<"最近"<<confirm_round<<"次平均loss:"<<avg<<"前"<<confirm_round<<"次平均loss:"<<confirm_last_avg<<" Z（显著程度)"<<(-zz);//[EDIT_SYMBOL]
-				//	coutd<<"\n";//[EDIT_SYMBOL]
-					coutd<<"\nloss减少显著程度"<<(-zz);
-					confirm_round=-1;
-				}		
-				
-				confirm_last_avg=avg;
-				confirm_last_dev=dev;
-			}
-			confirm_round++;
-
-
-			if(total_rounds%show_freq==show_freq-1){
-				float t=(float)(clock()-round_start)/CLOCKS_PER_SEC;			
-				total_time+=t;
-				int n=cacul_count-cacul_count_last;
-				cacul_count_last=cacul_count;
-				coutd<<"<第"<<total_rounds
-					<<"轮("<<cacul_count<<"),"
-					<<n<<"次计算，用时"
-					<<t<<"秒(单次"
-					<<setprecision(3)<<(t/n)<<"秒),"<<setprecision(6)
-					<<"共计"<<(int)total_time/60<<"分 ";
-				
-				coutd<<"次数"<<iteration_num<<" minibatch"<<data_num;
-				if(avg_step>0)cout<<" 步长 "<<setprecision(4)<<avg_step<<setprecision(6);//[EDIT_SYMBOL]
-				round_start=clock();
-			}		
-			
-			total_rounds++;			
-			
-		}
-
-	};

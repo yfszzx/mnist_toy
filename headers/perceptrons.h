@@ -126,7 +126,7 @@ public:
 	void show_struct(int idx){
 		coutd<<"<layer "<<idx<<">";
 		if(nodes_num>0){
-			cout<<"  input:"<<input_dimen<<"  nodes:"<<nodes_num<<"  type:"<<type<<"  param_num:"<<weight_len;
+			if(cout_show)cout<<"  input:"<<input_dimen<<"  nodes:"<<nodes_num<<"  type:"<<type<<"  param_num:"<<weight_len;
 			coutd;
 			memery();
 			show_memery_size(memery(),'g',"Õ¼ÓÃ");
