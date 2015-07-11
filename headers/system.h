@@ -65,7 +65,9 @@ int g_threads=-1;
     if( (err) != CURAND_STATUS_SUCCESS ){\
         fprintf(stderr, "CURAND error %d at file %s line %d.\n", (int)(err), __FILE__, __LINE__);\
   getchar();\
-    }}while(0)
+    }}while(0);
+#define CUDA_ERR_FLAG flag_cuda_error(__LINE__,__FILE__)
+
 void show_cuda_error(int line,char *file){ 
 	cudaThreadSynchronize();
     cudaError_t err=cudaGetLastError();//获得最近一次错误的错误代码
@@ -74,6 +76,18 @@ void show_cuda_error(int line,char *file){
 		coutd<<"CUDA "<<cudaGetErrorString(err)<<" at line "<<line-1<<"  file "<<file<<endl;;//显示错误内容
 		getchar();
 	}
+}
+
+bool flag_cuda_error(int line,char *file){ 
+	cudaThreadSynchronize();
+    cudaError_t err=cudaGetLastError();//获得最近一次错误的错误代码
+   if(err)
+	{
+		coutd<<"CUDA "<<cudaGetErrorString(err)<<" at line "<<line-1<<"  file "<<file<<endl;;//显示错误内容
+		getchar();
+		return true;
+	}
+   return false;
 }
 void show_cublas_error(cublasStatus_t t,int line,char *file){
 	cudaThreadSynchronize();
@@ -98,13 +112,13 @@ void g_gpu_init(){
 		 getchar();
 		 return;
 	 }
-	/*coutd<<"发现"<<device_count<<"个可用的显卡:";
+	coutd<<"发现"<<device_count<<"个可用的显卡:";
 	for(int i=0;i<device_count;i++){
 		 struct cudaDeviceProp device_prop;
 		 if(cudaGetDeviceProperties(&device_prop,i)==cudaSuccess){
 			 coutd<<"\t"<<i<<"."<<device_prop.name;
 		 }
-	}*/
+	}
 	int idx=0;
 /*	if(device_count>1){
 		do{
@@ -116,7 +130,7 @@ void g_gpu_init(){
 	cudaGetDeviceProperties(&prop,idx);
 	CUDA_CHECK;
 	g_threads=prop.maxThreadsPerBlock;
-	//coutd<<"threads per block:"<<g_threads;
+	coutd<<"threads per block:"<<g_threads;
 	coutd<<"初始化CUBLAS";
 	CUBT(cublasCreate(&cublasHandle));
 }
@@ -175,11 +189,11 @@ struct{
 		ifstream in(ffrom,ios::in|ios::binary);             //打开输入文件
 		ofstream out(fto,ios::out|ios::binary);              //打开输出文件
 		if(!in){
-			coutd<<"can not open the file";
+			cout<<"can not open the file \n"<<ffrom<<endl;
 			return 0;
 		}
 		if(!out){
-			coutd<<"can not open the file";
+			cout<<"can not open the file \n"<<fto<<endl;
 			return 0;
 		}
 		while (in.get(ch))//实现复制功能
@@ -212,7 +226,8 @@ struct{
 
 }file_opt;
 
-struct array_group_sum{
+class array_group_sum{
+public:
 	float *one;
 	float alpha;
 	float beta;
@@ -220,17 +235,28 @@ struct array_group_sum{
 	int dimen;
 	array_group_sum(int dmn,int n){
 		dimen=dmn;
-		num=n;
+		num=n;		
 		cudaMalloc((void**)&one,sizeof(float)*num);
+		/*
+		float *t=new float[num];
+		for(int i=0;i<num;i++){
+			t[i]=1.0f;
+		}
+		cudaMemcpy(one,t,sizeof(float)*num,cudaMemcpyHostToDevice);
+		CUDA_CHECK;
+		delete [] t;
+		*/
 		thrust :: device_ptr <float > dev_one(one); 
-		thrust :: fill ( dev_one , dev_one+num, (float ) 1.0f);
+		thrust :: fill ( dev_one , dev_one+num, 1.0f);
 		alpha=1.0f;
 		beta=0;
+		CUDA_CHECK;
 	}
 	~array_group_sum(){
 		cudaFree(one);
+		CUDA_CHECK;
 	}
-	void sum(float *output,float *array_group){
+	void sum(float *output,float *array_group){	
 		CUBT(cublasSgemv(cublasHandle,CUBLAS_OP_N,dimen,num,&alpha,array_group,dimen, one,1,&beta, output,1));
 	}
 };
@@ -278,27 +304,16 @@ float	array_sum(float *arr,int dimen){//矢量各项之和
 		thrust::device_ptr<float> a ( arr );
 		return  thrust::reduce (a , a+dimen, (float) 0, thrust::plus <float>());
 }
-
-class virtual_data_set{
-public:
-	int input_dimen;
-	int output_dimen;
-	string action_illu;
-	int *bagging_idx;
-	int *compare_idx;
-	bool bag_mod;
-	int scl_from;
-	int scl_to;
-	int scl;
-	int compare_scl_from;
-	int compare_scl_to;
-	int compare_scl;
-	int sample_num;
-	struct cmp_data{
+float array_length(float *arr,int dimen){
+	float ret;
+	CUBT(cublasSnrm2 (cublasHandle,dimen, arr, 1,&ret));
+	return ret;
+}
+struct cmp_data{
 		int num;
 		int input_num;
 		int output_num;
-		float *trans_input;
+		float *trans_input;//在运行过程中，为了减少重复计算，将预处理后的结果保存在此
 		float *input;
 		float *target;
 		float *output;
@@ -325,9 +340,7 @@ public:
 			output_num=output_dimen;
 			memfree();
 			cudaMalloc((void**)&input,sizeof(float)*n*input_dimen);
-			CUDA_CHECK;
 			cudaMalloc((void**)&target,sizeof(float)*n*output_dimen);
-			CUDA_CHECK;
 			cudaMalloc((void**)&output,sizeof(float)*n*output_dimen);
 			CUDA_CHECK;
 			cpu_input=new float[input_dimen*num];
@@ -340,14 +353,16 @@ public:
 			CUDA_CHECK;		
 			cudaMemcpy(target,cpu_target,sizeof(float)*output_num*num,cudaMemcpyHostToDevice);
 			CUDA_CHECK;	
-			float avg=0;
-			for(int i=0;i<num;i++){
-				avg+=cpu_target[i];
-			}
-			avg/=num;
 			init_result=0;
-			for(int i=0;i<num;i++){
-				init_result+=(cpu_target[i]-avg)*(cpu_target[i]-avg);
+			for(int j=0;j<output_num;j++){
+				float avg=0;
+				for(int i=0;i<num;i++){
+					avg+=cpu_target[i*output_num+j];
+				}
+				avg/=num;			
+				for(int i=0;i<num;i++){
+					init_result+=(cpu_target[i*output_num+j]-avg)*(cpu_target[i*output_num+j]-avg);
+				}
 			}
 			init_result/=num;
 		}
@@ -392,6 +407,22 @@ public:
 			 if(trans_input!=NULL)cudaFree(trans_input);
 		}
 	};
+class virtual_data_set{
+public:
+	int input_dimen;
+	int output_dimen;
+	string action_illu;
+	int *bagging_idx;
+	int *compare_idx;
+	bool bag_mod;
+	int scl_from;
+	int scl_to;
+	int scl;
+	int compare_scl_from;
+	int compare_scl_to;
+	int compare_scl;
+	int sample_num;
+
 	virtual_data_set(){
 		bagging_idx=NULL;
 		compare_idx=NULL;

@@ -535,7 +535,7 @@ class PCA{
 	//	coutd<<"(空格分隔，当前值分别为:"<<set.jacobi_scl<<"  "<<set.jacobi_stop_num<<")";
 		set.jacobi_scl=0.01;
 		set.jacobi_stop_num=5;
-		cin>>set.jacobi_scl>>set.jacobi_stop_num;
+		//cin>>set.jacobi_scl>>set.jacobi_stop_num;
 		
 		float *cov_mtx=new float[set.dimen*set.dimen];	
 		for(int i=0;i<set.dimen;i++){
@@ -750,6 +750,7 @@ class PCA{
 	void trans_data(float *from,float *to,int num,float noise_scl=0){
 		if(!set.pre_operate){
 			cudaMemcpy(to,from,sizeof(float)*num*set.dimen,cudaMemcpyDeviceToDevice);
+			CUDA_CHECK;
 			return;
 		}
 		array_add_to_matrix(from,avg,-1,set.dimen,num);

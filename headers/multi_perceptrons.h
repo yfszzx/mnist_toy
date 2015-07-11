@@ -116,8 +116,9 @@ public:
 	int data_num;
 	string path;
 	string proj_path;
-	
+	string file_name;
 	multi_perceptrons(string name){
+		file_name="struct.stl";
 		nervs=NULL;
 		output_tmp=NULL;
 		layers_num=0;
@@ -128,10 +129,10 @@ public:
 		data_num=0;
 		train_mod=false;
 		proj_path=name;
-		path=name+"struct.stl";
+		path=name+file_name;
 		loss_mod='2';
 		reguler_mod=0;
-		save_history=false;
+		save_history=true;
 	}
 		void init_nervs(){			
 		if(nervs!=NULL){
@@ -185,24 +186,24 @@ public:
 		for(int i=0;i<layers_num;i++){
 			nervs[i]->set_data_num(data_num);
 		}
-		cudaMalloc((void**)&output_tmp,sizeof(float)*output_dimen*data_num);
-		cudaMalloc((void**)&tmp_array,sizeof(float)*output_dimen*data_num);
+		o_len=output_dimen*data_num;
+		blocks=(o_len+g_threads-1)/g_threads;
+		cudaMalloc((void**)&output_tmp,sizeof(float)*o_len);
+		cudaMalloc((void**)&tmp_array,sizeof(float)*o_len);
+		CUDA_CHECK;
 	}
-	float get_result(float *input,float *target){			
+	float get_result(float *input,float *target){
 		nerv_bottom->run(input);
-		for(int i=1;i<layers_num;i++){
-			nervs[i]->run(nervs[i-1]->output);
+		for(ci=1;ci<layers_num;ci++){
+			nervs[ci]->run(nervs[ci-1]->output);
+			//coutd<<"oi"<<array_length(nervs[ci-1]->output,nervs[ci-1]->nodes_num*data_num);
 		}
-		int dimen=output_dimen*data_num;
+		gpu_loss_function<<<blocks,g_threads>>>(nerv_top->output,target,tmp_array,output_tmp,o_len,loss_mod,output_dimen);	
 		CUDA_CHECK;
-		int blocks=(dimen+g_threads-1)/g_threads;
-		gpu_loss_function<<<blocks,g_threads>>>(nerv_top->output,target,tmp_array,output_tmp,dimen,loss_mod,output_dimen);	
-		CUDA_CHECK;
-		float ret=array_sum(tmp_array,dimen)/data_num;
-		CUDA_CHECK;
-		return ret;	
+		return array_sum(tmp_array,o_len)/data_num;	
 	}
-	float *layer_out(int layer,float *s_input,int num,bool in_cuda_pos=true){//中间层的输出，返回中间层输出数据的指针(device)
+	float *layer_out(int layer,float *&s_input,int num,bool in_cuda_pos=true){//中间层的输出，返回中间层输出数据的指针(device)
+		CUDA_CHECK;
 		set_data_num(num);
 		float *input;
 		if(in_cuda_pos){
@@ -213,9 +214,9 @@ public:
 			cudaMemcpy(input,s_input,sizeof(float)*input_dimen*data_num,cudaMemcpyHostToDevice);
 			CUDA_CHECK;
 
-		}
+		}	
 		nerv_bottom->run(input);
-		for(int i=1;i<layer;i++){
+		for(int i=1;i<=layer;i++){
 			nervs[i]->run(nervs[i-1]->output);
 		}
 		if(!in_cuda_pos){
@@ -270,38 +271,42 @@ public:
 		return ret;
 	}
 	void top_pre_deriv(){
-		int len=output_dimen*data_num;
 		if(nerv_top->type=='t'){
-			//int blocks=(len+g_threads-1)/g_threads;
-			g_top_tanh_deriv/*<<<blocks,g_threads>>>*/(output_tmp,nerv_top->output,len);
+			g_top_tanh_deriv(output_tmp,nerv_top->output,o_len);
 			
 		}
 		if(nerv_top->type=='s'){
-		//	int blocks=(len+g_threads-1)/g_threads;
-			g_top_sigmoid_deriv/*<<<blocks,g_threads>>>*/(output_tmp,nerv_top->output,len);
+			g_top_sigmoid_deriv(output_tmp,nerv_top->output,o_len);
 
 		}
 		if(nerv_top->type=='l')
-			CUBT(cublasScopy(cublasHandle, len, output_tmp, 1,nerv_top->output,1));
+			CUBT(cublasScopy(cublasHandle,o_len, output_tmp, 1,nerv_top->output,1));
+		//coutd<<"ot"<<array_length(nerv_top->output,o_len);
+		//coutd<<"to"<<array_length(output_tmp,o_len);
 	}
 	void cacul_deriv(float *input,float *target){
 		top_pre_deriv();
-		for(int i=layers_num-1;i>0;i--){
-			nervs[i]->get_deriv(nervs[i-1]->output);		
-			nervs[i]->get_sub_deriv(nervs[i-1]->output,nervs[i-1]->type);
+		for(ci=layers_num-1;ci>0;ci--){
+			//coutd<<"do1 "<<array_length(nervs[ci]->output,nervs[ci]->nodes_num*data_num);
+			nervs[ci]->get_deriv(nervs[ci-1]->output);	
+			//coutd<<"do2 "<<array_length(nervs[ci]->output,nervs[ci]->nodes_num*data_num);
+			nervs[ci]->get_sub_deriv(nervs[ci-1]->output,nervs[ci-1]->type);
+			//coutd<<"do3 "<<array_length(nervs[ci]->output,nervs[ci]->nodes_num*data_num);
+		
 		}
 		nervs[0]->get_deriv(input);
 		if(reguler_mod){
-			for(int i=0;i<layers_num;i++)
-				nervs[i]->get_decay_deriv();
+			for(ci=0;ci<layers_num;ci++)
+				nervs[ci]->get_decay_deriv();
 		}
 	}
 	void cacul_nerv(float *input,float *target) {	
+		
 		result=get_result(input,target);
 		real_result=result;	
 		if(reguler_mod){
-			for(int i=0;i<layers_num;i++)
-				result+=nervs[i]->weight_decay_sum();
+			for(ci=0;ci<layers_num;ci++)
+				result+=nervs[ci]->weight_decay_sum();
 		}
 		cacul_deriv(input,target);
 		
@@ -561,7 +566,11 @@ public:
 			cudaFree(output_tmp);
 			cudaFree(tmp_array);
 		};
+		output_tmp=NULL;
 	}
+	int o_len;
+	int blocks;
+	int ci;
 };
 class multi_perceptrons_sample:public search_tool{
 public:

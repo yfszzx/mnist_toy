@@ -8,10 +8,10 @@ public:
 	int input_dimen;
 	int output_dimen;
 	char vote_mod;
-	bagging(string path,DATA_CLASS *data_set,bool trn=true){
+	bagging(string path,void *data_set,bool trn=true){
 		root_path=path;
 		nervs_num=0;
-		dt_set=data_set;
+		dt_set=(DATA_CLASS *)data_set;
 		vote_mod='a';//a:averge m:middle v:vote
 		main_nerv=new ML_CLASS(path,dt_set,'r');		
 		input_dimen=main_nerv->multi_perceptrons::input_dimen;
@@ -62,11 +62,13 @@ public:
 			coutd<<"正在训练第"<<(nervs_num+1)<<"个bagging";
 			string path=get_idx_name();
 			if(!file_opt.check_folder(path))file_opt.create_folder(path);//return;
-			if(!file_opt.copy(root_path+"params.stl",path+"params.stl"))return;
+			if(!file_opt.copy(root_path+"pre_params.stl",path+"pre_params.stl"))return;
+			if(!file_opt.copy(root_path+"search_set.stl",path+"search_set.stl"))return;
 			if(!file_opt.copy(root_path+"pre_PCA.stl",path+"pre_PCA.stl"))return;
+			if(!file_opt.copy(root_path+"train_controll.stl",path+"train_controll.stl"))return;
 			if(!file_opt.copy(root_path+"struct.stl",path+"struct.stl"))return;
 			if(nervs_num==0){nervs_num++;continue;}//第一个bagging直接从根目录中复制
-			dt_set->bagging_set();
+			//dt_set->bagging_set();
 			ML_CLASS *nerv=new ML_CLASS(path,dt_set,'b');
 			int num=nerv->ctr.total_rounds;
 			nerv->train_reset();

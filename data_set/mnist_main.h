@@ -12,7 +12,7 @@ float max_value(float *out,int idx,int dimen){
 	return maxv/sum;
 }
 
-void show_accurercy(string main_path,DATA_CLASS *m){
+void show_accurercy(string main_path,mnist_data_set *m){
 	main_train p(main_path,m,'r');				
 	int num=10000;
 	float *ipt=m->input[0];
@@ -28,7 +28,7 @@ void show_accurercy(string main_path,DATA_CLASS *m){
 	m->accuracy(out,m->label_t[0],num);
 	delete [] out;
 }
-void show_wrong_sample(string main_path,DATA_CLASS *m){
+void show_wrong_sample(string main_path,mnist_data_set *m){
 	main_train p(main_path,m,'r');				
 	int num=m->test_num;
 	float *ipt=m->input_t[0];
@@ -52,7 +52,7 @@ void show_wrong_sample(string main_path,DATA_CLASS *m){
 			coutd<<"识别结果:"<<(m->get_out_value(out+idx*m->output_num));
 		}while(1);
 }
-void check_result(string main_path,DATA_CLASS *m){
+void check_result(string main_path,mnist_data_set *m){
 	string sel;
 	do{
 		coutd;
@@ -77,7 +77,7 @@ void check_result(string main_path,DATA_CLASS *m){
 string main_path;
 string data_path;
 void check_distortion(){
-	DATA_CLASS *m=new DATA_CLASS(data_path,main_path,true);
+	mnist_data_set *m=new mnist_data_set(data_path,main_path,true);
 	float *map;
 	int rows=m->rows;
 	int columns=m->columns;
@@ -126,7 +126,7 @@ void check_distortion(){
 	cudaFree(map);
 	delete [] c_map;
 }
-void show_bagging_result(DATA_CLASS *m,string main_path){
+void show_bagging_result(mnist_data_set *m,string main_path){
 	bagging p(main_path,m,false);
 	cout<<"\n各个MLP正确率:";
 	cout_show=false;
@@ -162,8 +162,13 @@ void start(){
 			coutd;
 			coutd<<"***********************************************************************";
 			g_gpu_init();
-			main_path="";//"f:\\mnist\\";//[EDIT_SYMBOL]
-			data_path="data_set\\";//"f:\\mnist\\data_set\\";//[EDIT_SYMBOL]
+#ifdef TEST_MOD
+			main_path="f:\\mnist\\";
+			data_path="f:\\mnist\\data_set\\";
+#else
+			main_path="";//[EDIT_SYMBOL]
+			data_path="data_set\\";//[EDIT_SYMBOL]
+#endif
 			string name;
 			coutd;
 		do{
@@ -193,10 +198,11 @@ void menu(){
 			coutd;	
 			coutd<<"\t1.查看 mnist 图像";
 			coutd<<"\t2.查看 distortion 效果";			
-			coutd<<"\t3.训练";
+			coutd<<"\t3.训练";			
 			coutd<<"\t4.查看训练结果";
 			coutd<<"\t5.bagging训练";
 			coutd<<"\t6.bagging检验";
+			coutd<<"\t7.逐层训练";
 			coutd<<"选择>";
 			char sel;
 			cin>>sel;
@@ -211,25 +217,32 @@ void menu(){
 					check_distortion();
 					break;
 				case '3':{	
-					DATA_CLASS *m=new DATA_CLASS(data_path,main_path);
+					mnist_data_set *m=new mnist_data_set(data_path,main_path);
 					main_train s(main_path,m);
 					delete m;
 					break;
 					   }
 				case '4':{
 					g_gpu_init();
-					DATA_CLASS *m=new DATA_CLASS(data_path,main_path,true);
+					mnist_data_set *m=new mnist_data_set(data_path,main_path,true);
 					check_result(main_path,m);
 						 }
 					break;	
 				case '5':{
-					DATA_CLASS *m=new DATA_CLASS(data_path,main_path);
+					mnist_data_set *m=new mnist_data_set(data_path,main_path);
 					bagging tt(main_path,m,true);
 						 }
 					break;
 				case '6':{
-					DATA_CLASS *m=new DATA_CLASS(data_path,main_path,true);
+					mnist_data_set *m=new mnist_data_set(data_path,main_path,true);
 					show_bagging_result(m,main_path);
+					
+						 }
+					break;
+				
+				case '7':{
+					mnist_data_set *m=new mnist_data_set(data_path,main_path,true);
+					deep_train d(main_path,m);
 					
 						 }
 					break;

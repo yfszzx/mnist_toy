@@ -4,13 +4,11 @@ public:
 	struct data_pre_params{
 		float noise_scale;
 		int tmp;
-		int show_freq;
 		int compare_num;
 		void show(){
 			coutd<<"<数据预处理参数>";
 			coutd<<"\t1.高斯噪音尺度"<<noise_scale;
 			coutd<<"\t2.对照数据数量"<<compare_num;
-			coutd<<"\t3.对照数据显示间隔"<<show_freq;
 		}
 		void set(){
 			char sel;
@@ -26,9 +24,6 @@ public:
 				case '2':
 					cin>>compare_num;
 					break;
-				case '3':
-					cin>>show_freq;
-					break;
 				case 'l':
 					show();
 					break;
@@ -39,7 +34,6 @@ public:
 	}
 	data_pre_params(){
 			noise_scale=0;
-			show_freq=500;
 			compare_num=10000;
 		}
 	};
@@ -56,7 +50,7 @@ public:
 	int data_num,last_data_num;
 	DATA_CLASS *data_set;
 	string root;
-	load_train_data_class(DATA_CLASS *p,string path):PCA(path){		
+	load_train_data_class(void *p,string path):PCA(path){		
 		root=path;
 		input=NULL;
 		target=NULL;
@@ -66,10 +60,10 @@ public:
 		//all_target=NULL;
 		//all_bl=false;
 		//all_group_idx=0;
-		data_set=p;
+		data_set=(DATA_CLASS *)p;
 		data_num=0;
-		output_dimen=p->output_dimen;
-		pre_dimen=p->input_dimen;
+		output_dimen=data_set->output_dimen;
+		pre_dimen=data_set->input_dimen;
 		if(!pre_read()){
 			pca_main(data_set->input_dimen);
 			pre_read();
@@ -107,8 +101,8 @@ public:
 		 last_data_num=data_num;
 		 if(data_num!=dt_num){
 			 data_num=dt_num;
-			 if(get_input!=NULL)delete [] get_input;
-			 if(get_target!=NULL)delete [] get_target;
+			 safe_free(get_input);
+			 safe_free(get_target);
 			 get_input=new float[set.dimen*data_num];
 			 get_target=new float[output_dimen*data_num];
 		 }
@@ -146,7 +140,6 @@ public:
 			CUDA_CHECK;
 			cudaMalloc((void**)&input,sizeof(float)*data_num*input_dimen);
 			cudaMalloc((void**)&pre_input,sizeof(float)*data_num*set.dimen);
-			CUDA_CHECK;
 			cudaMalloc((void**)&target,sizeof(float)*data_num*output_dimen);
 			CUDA_CHECK;
 		}
@@ -170,45 +163,24 @@ public:
 		}
 	}
 	virtual void cacual_compare(char mod='c')=0;
+	void get_compare_data(char mod){		
+		cmp_data &s=(mod=='c')?data_set->compare_data:data_set->train_cmp_data;
+		if(s.num>0)return;
+		data_set->get_compare_data(pre_params.compare_num,mod);
+		cudaMalloc((void **)&(s.trans_input),sizeof(float)*input_dimen*pre_params.compare_num);
+		trans_data(s.input,s.trans_input,pre_params.compare_num);
+	}
+	void get_compare_data(){
+		get_compare_data('t');
+		get_compare_data('c');
+	}
 	float show_compare(char mod='c'){
 		if(pre_params.compare_num==0)return 0;		
-		virtual_data_set::cmp_data &s=(mod=='c')?data_set->compare_data:data_set->train_cmp_data;
-		if(s.num==0){
-				data_set->get_compare_data(pre_params.compare_num,mod);
-				cudaMalloc((void **)&(s.trans_input),sizeof(float)*input_dimen*pre_params.compare_num);
-				trans_data(s.input,s.trans_input,pre_params.compare_num);			
-		}
+		cmp_data &s=(mod=='c')?data_set->compare_data:data_set->train_cmp_data;		
 		cacual_compare(mod);
 		cudaMemcpy(s.cpu_output,s.output,sizeof(float)*output_dimen*pre_params.compare_num,cudaMemcpyDeviceToHost);	
 		CUDA_CHECK;
 		data_set->show_compare(mod);
-		return s.result;
-		
-	}
-	void show_and_record_init(int total_rounds){
-		record_path=root+"train_record.csv";
-		if(total_rounds==0){
-			record_file=new ofstream(record_path);
-			(*record_file)<<"时间,迭代轮次,计算次数,loss,对照值,采样值,步长"<<endl;
-		}else{
-			record_file=new ofstream(record_path,ios::app);
-			(*record_file)<<total_rounds<<",重新载入"<<endl;
-		}
-		avg_loss=0;
-		avg_step=0;		
-	}
-	void show_and_record(float tm,int count,int num){
-		(*record_file)<<tm<<","<<count<<","<<num<<","<<(avg_loss/pre_params.show_freq)<<",";
-		(*record_file)<<show_compare()<<",";
-		(*record_file)<<show_compare('t')<<",";
-		(*record_file)<<(avg_step/pre_params.show_freq)<<endl;
-		avg_loss=0;
-		avg_step=0;
-	}
-	float avg_loss;
-	float avg_step;
-	private:
-		string record_path;
-		ofstream *record_file;
-	
+		return s.result;		
+	}	
 };
