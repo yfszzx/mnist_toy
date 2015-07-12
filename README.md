@@ -5,17 +5,19 @@
   
   b.对mnist图像进行elastic distortion,affine distortion,并可以查看distortion的效果
   
-  c.优化方法包括:SGD(随机梯度下降)，SGD linesearch(一维搜索的随机梯度下降法),CG(共轭梯度法),LFBGS(限域拟牛顿法)
+  c.可以用PCA对数据进行预处理
   
-  d.损失函数支持:L1,L2,ce(互熵),softmax
+  d.优化方法包括:SGD(随机梯度下降)，SGD linesearch(一维搜索的随机梯度下降法),CG(共轭梯度法),LFBGS(限域拟牛顿法)
   
-  e.支持L1和L2正则化技术，对不同层的感知机可以采用不同的正则方案
+  e.损失函数支持:L1,L2,ce(互熵),softmax
   
-  f.可以在输入数据中加入高斯噪音
+  f.支持L1和L2正则化技术，对不同层的感知机可以采用不同的正则方案
   
-  g.支持逐层训练（自编码)
+  g.可以在输入数据中加入高斯噪音
   
-  h.支持训练多个MLP进行bagging
+  h.支持逐层训练（自编码)
+  
+  i.支持训练多个MLP进行bagging
   
   
 2.本程序的编译运行环境是：window 64x,并且要能够运行 cuda程序。
